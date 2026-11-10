@@ -2,7 +2,5 @@ services:
   - type: web
     name: xing-bu-xing-a
     runtime: node
-    plan: free
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /

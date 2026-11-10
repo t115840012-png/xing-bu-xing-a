@@ -5,7 +5,7 @@ const crypto = require("crypto");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { maxHttpBufferSize: 12e6 });
 const PORT = process.env.PORT || 3000;
 app.use(express.static("public"));
 
@@ -19,35 +19,54 @@ function publicRoom(room) {
     settings: room.settings,
     started: room.started,
     round: room.round,
-    currentPlayer: room.order[room.turnIndex] || null,
     submissions: room.submissions.length
   };
 }
-function sendRoom(room) {
-  io.to(room.code).emit("room-update", publicRoom(room));
-}
-function nextTurn(room) {
-  if (room.submissions.length >= room.order.length * room.settings.rounds) {
-    room.started = false;
-    room.finished = true;
-    io.to(room.code).emit("game-finished", { works: room.submissions, players: room.players.map(p=>p.name) });
-    sendRoom(room);
-    return;
-  }
-  room.turnIndex++;
-  if (room.turnIndex >= room.order.length) {
-    room.turnIndex = 0;
-    room.round++;
-  }
-  io.to(room.code).emit("turn-start", {
-    playerId: room.order[room.turnIndex],
-    round: room.round,
-    totalRounds: room.settings.rounds,
-    duration: room.settings.seconds,
-    previous: room.submissions[room.submissions.length - 1]?.abstract || null
+function sendRoom(room) { io.to(room.code).emit("room-update", publicRoom(room)); }
+
+function finishGame(room) {
+  room.started = false;
+  room.finished = true;
+  const works = room.submissions.sort((a,b) => a.round - b.round ||
+    room.order.indexOf(a.playerId) - room.order.indexOf(b.playerId));
+  io.to(room.code).emit("game-finished", {
+    works,
+    players: room.players.map(p => p.name),
+    rounds: room.settings.rounds
   });
   sendRoom(room);
 }
+
+function startRound(room) {
+  if (room.round > room.settings.rounds + 1) return finishGame(room);
+  room.roundSubmissions = new Map();
+  room.order.forEach((playerId, index) => {
+    const previousPlayerId = room.order[(index - 1 + room.order.length) % room.order.length];
+    const previous = room.round === 1 ? null :
+      (room.lastRoundSubmissions.get(previousPlayerId)?.abstract || null);
+    io.to(playerId).emit("turn-start", {
+      round: room.round,
+      totalRounds: room.settings.rounds + 1,
+      duration: room.settings.seconds,
+      previous
+    });
+  });
+  io.to(room.code).emit("round-started", { round: room.round, totalRounds: room.settings.rounds });
+  sendRoom(room);
+}
+
+function advanceWhenReady(room) {
+  if (room.roundSubmissions.size !== room.order.length) return;
+  const completed = room.order.map(id => room.roundSubmissions.get(id)).filter(Boolean);
+  completed.forEach(work => room.submissions.push(work));
+  room.lastRoundSubmissions = new Map(completed.map(work => [work.playerId, work]));
+  if (room.round >= room.settings.rounds + 1) finishGame(room);
+  else {
+    room.round += 1;
+    startRound(room);
+  }
+}
+
 io.on("connection", socket => {
   socket.on("create-room", ({ name }) => {
     let roomCode;
@@ -56,13 +75,15 @@ io.on("connection", socket => {
       code: roomCode, host: socket.id,
       players: [{ id: socket.id, name: String(name || "玩家1").slice(0,16) }],
       settings: { seconds: 60, rounds: 1 }, started: false, finished: false,
-      order: [], turnIndex: 0, round: 1, submissions: []
+      order: [], round: 1, submissions: [],
+      roundSubmissions: new Map(), lastRoundSubmissions: new Map()
     };
     rooms.set(roomCode, room);
     socket.join(roomCode);
     socket.emit("room-created", publicRoom(room));
     sendRoom(room);
   });
+
   socket.on("join-room", ({ code: raw, name }) => {
     const room = rooms.get(String(raw || "").toUpperCase());
     if (!room) return socket.emit("error-message", "找不到這個房間，請確認房間代碼。");
@@ -73,6 +94,7 @@ io.on("connection", socket => {
     socket.emit("joined-room", publicRoom(room));
     sendRoom(room);
   });
+
   socket.on("update-settings", settings => {
     const room = [...rooms.values()].find(r => r.host === socket.id);
     if (!room || room.started) return;
@@ -80,41 +102,49 @@ io.on("connection", socket => {
     room.settings.rounds = Math.max(1, Math.min(4, Number(settings.rounds) || 1));
     sendRoom(room);
   });
+
   socket.on("start-game", () => {
     const room = [...rooms.values()].find(r => r.host === socket.id);
     if (!room || room.started || room.players.length < 2) return;
     room.started = true;
     room.finished = false;
     room.order = room.players.map(p => p.id);
-    room.turnIndex = 0;
     room.round = 1;
     room.submissions = [];
+    room.roundSubmissions = new Map();
+    room.lastRoundSubmissions = new Map();
     io.to(room.code).emit("game-started");
-    io.to(room.code).emit("turn-start", {
-      playerId: room.order[0], round: 1, totalRounds: room.settings.rounds,
-      duration: room.settings.seconds, previous: null
-    });
-    sendRoom(room);
+    startRound(room);
   });
-  socket.on("submit-drawing", ({ image, abstract }) => {
-    const room = [...rooms.values()].find(r => r.started && r.order[r.turnIndex] === socket.id);
-    if (!room) return;
-    room.submissions.push({
-      playerName: room.players.find(p=>p.id===socket.id)?.name || "玩家",
-      image, abstract, round: room.round
+
+  socket.on("submit-drawing", ({ image, abstract, round }) => {
+    const room = [...rooms.values()].find(r => r.started && r.order.includes(socket.id));
+    if (!room || Number(round) !== room.round || room.roundSubmissions.has(socket.id)) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) return;
+    room.roundSubmissions.set(socket.id, {
+      playerId: socket.id,
+      playerName: player.name,
+      image: String(image || ""),
+      abstract: String(abstract || image || ""),
+      round: room.round
     });
-    io.to(room.code).emit("work-added", { count: room.submissions.length });
-    nextTurn(room);
+    socket.emit("drawing-received");
+    io.to(room.code).emit("work-added", { count: room.roundSubmissions.size, total: room.order.length });
+    advanceWhenReady(room);
   });
+
   socket.on("disconnect", () => {
     for (const [key, room] of rooms) {
       room.players = room.players.filter(p => p.id !== socket.id);
-      if (!room.players.length) rooms.delete(key);
-      else {
-        if (room.host === socket.id) room.host = room.players[0].id;
-        if (room.started && room.order[room.turnIndex] === socket.id) nextTurn(room);
-        sendRoom(room);
+      if (!room.players.length) { rooms.delete(key); continue; }
+      if (room.host === socket.id) room.host = room.players[0].id;
+      if (room.started) {
+        room.order = room.order.filter(id => id !== socket.id);
+        if (room.roundSubmissions.has(socket.id)) room.roundSubmissions.delete(socket.id);
+        advanceWhenReady(room);
       }
+      sendRoom(room);
     }
   });
 });

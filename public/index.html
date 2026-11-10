@@ -19,19 +19,40 @@
   <p>把房間代碼傳給朋友，只有知道代碼的人能加入。</p>
   <h3>玩家</h3><ul id="players"></ul>
   <div id="hostSettings" class="settings">
-    <label>每人作畫時間<select id="seconds"><option value="30">30 秒</option><option value="60" selected>60 秒</option><option value="90">90 秒</option><option value="120">120 秒</option></select></label>
-    <label>每人輪數<select id="rounds"><option value="1">1 輪</option><option value="2">2 輪</option><option value="3">3 輪</option><option value="4">4 輪</option></select></label>
+    <label>每次作畫時間<select id="seconds"><option value="30">30 秒</option><option value="60" selected>60 秒</option><option value="90">90 秒</option><option value="120">120 秒</option></select></label>
+    <label>傳遞次數<select id="rounds"><option value="1">1 輪</option><option value="2">2 輪</option><option value="3">3 輪</option><option value="4">4 輪</option></select></label>
     <button id="start">開始遊戲</button>
   </div>
   <p id="waiting" class="hint hidden">等待房主開始遊戲……</p>
 </section>
 <section id="game" class="panel hidden">
-  <div class="gamehead"><div><span id="roundLabel"></span><h2 id="turnLabel">輪到你了！</h2></div><div class="timer" id="timer">60</div></div>
-  <div id="promptBox" class="prompt hidden"><p>請根據上一位玩家留下的抽象線索創作：</p><img id="promptImage" alt="上一位玩家的抽象線索"></div>
-  <p id="firstPrompt">沒有前一張線索，請自由畫下第一張作品！</p>
+  <div class="gamehead"><div><span id="roundLabel"></span><h2 id="turnLabel">大家一起畫！</h2><span id="progressLabel" class="hint"></span></div><div class="timer" id="timer">60</div></div>
+  <div id="promptBox" class="prompt hidden"><p>請根據上一位玩家留下的幾何線索創作：</p><img id="promptImage" alt="上一位玩家的抽象線索"></div>
+  <p id="firstPrompt">第一輪開始！請自由畫下第一張作品。</p>
   <canvas id="canvas" width="900" height="520"></canvas>
+  <div class="toolbar">
+    <div class="toolrow">
+      <button class="tool active" data-tool="brush">畫筆</button>
+      <button class="tool" data-tool="eraser">橡皮擦</button>
+      <button class="tool" data-tool="bucket">油漆桶</button>
+      <label class="color-control">自訂顏色<input id="colorPicker" type="color" value="#292638"></label>
+    </div>
+    <div class="toolrow palette">
+      <span>色票</span>
+      <button class="swatch" data-color="#292638" style="--swatch:#292638" aria-label="深灰"></button>
+      <button class="swatch" data-color="#e45757" style="--swatch:#e45757" aria-label="紅色"></button>
+      <button class="swatch" data-color="#f2a541" style="--swatch:#f2a541" aria-label="橘色"></button>
+      <button class="swatch" data-color="#f2d35e" style="--swatch:#f2d35e" aria-label="黃色"></button>
+      <button class="swatch" data-color="#65a879" style="--swatch:#65a879" aria-label="綠色"></button>
+      <button class="swatch" data-color="#5a91cf" style="--swatch:#5a91cf" aria-label="藍色"></button>
+      <button class="swatch" data-color="#9275bd" style="--swatch:#9275bd" aria-label="紫色"></button>
+      <button class="swatch" data-color="#f0a9bf" style="--swatch:#f0a9bf" aria-label="粉色"></button>
+      <button class="swatch" data-color="#ffffff" style="--swatch:#ffffff" aria-label="白色"></button>
+    </div>
+    <label class="size-control">筆刷粗細 <input id="brushSize" type="range" min="2" max="40" value="7"><b id="brushSizeValue">7</b></label>
+  </div>
   <div class="drawtools"><button id="clear" class="secondary">清空畫布</button><button id="submit">送出作品</button></div>
-  <p class="hint">如果時間到了，系統會自動送出目前畫面。</p>
+  <p class="hint">所有人同時作畫；你送出後，畫布會鎖定，等其他玩家完成後一起傳給下一位。</p>
 </section>
 <section id="results" class="panel hidden"><h2>接龍完成！</h2><p>看看大家如何把線索變成新的想像。</p><div id="works" class="works"></div><button id="backHome">回到首頁</button></section>
 <div id="notice" role="status"></div>
