@@ -59,28 +59,20 @@ async function abstractImage(source){
   const img=new Image();img.src=source;
   return new Promise(resolve=>{
     img.onload=()=>{
-      const sample=document.createElement("canvas");sample.width=30;sample.height=20;
-      const s=sample.getContext("2d");s.fillStyle="#fff";s.fillRect(0,0,30,20);s.drawImage(img,0,0,30,20);
-      const data=s.getImageData(0,0,30,20).data;
-      const out=document.createElement("canvas");out.width=900;out.height=520;
-      const o=out.getContext("2d");o.fillStyle="#fff";o.fillRect(0,0,900,520);
-      const cols=5,rows=4,cw=180,ch=130;
-      for(let gy=0;gy<rows;gy++)for(let gx=0;gx<cols;gx++){
-        let rr=0,gg=0,bb=0,n=0;
-        for(let sy=gy*5;sy<(gy+1)*5;sy++)for(let sx=gx*6;sx<(gx+1)*6;sx++){
-          const i=(sy*30+sx)*4;rr+=data[i];gg+=data[i+1];bb+=data[i+2];n++;
-        }
-        rr=Math.round(rr/n/18)*18;gg=Math.round(gg/n/18)*18;bb=Math.round(bb/n/18)*18;
-        const x=gx*cw,y=gy*ch,j=12;
-        const points=[
-          [x+Math.random()*j,y+Math.random()*j],
-          [x+cw-Math.random()*j,y+Math.random()*j],
-          [x+cw-Math.random()*j,y+ch-Math.random()*j],
-          [x+Math.random()*j,y+ch-Math.random()*j]
-        ];
-        o.fillStyle=`rgb(${rr},${gg},${bb})`;o.beginPath();o.moveTo(points[0][0],points[0][1]);
-        points.slice(1).forEach(p=>o.lineTo(p[0],p[1]));o.closePath();o.fill();
-      }
+      // 先縮小取樣，再用最近鄰放大，形成清楚的大型像素方塊。
+      // 45 x 26 的取樣尺寸，約每 20 x 20 畫布像素合成一格。
+      const small=document.createElement("canvas");
+      small.width=45;small.height=26;
+      const s=small.getContext("2d");
+      s.fillStyle="#fff";s.fillRect(0,0,small.width,small.height);
+      s.drawImage(img,0,0,small.width,small.height);
+
+      const out=document.createElement("canvas");
+      out.width=900;out.height=520;
+      const o=out.getContext("2d");
+      o.imageSmoothingEnabled=false;
+      o.fillStyle="#fff";o.fillRect(0,0,out.width,out.height);
+      o.drawImage(small,0,0,out.width,out.height);
       resolve(out.toDataURL("image/png"));
     };
     img.onerror=()=>resolve(source);
@@ -119,7 +111,7 @@ socket.on("work-added",({count,total})=>{$("progressLabel").textContent=`已完�
 socket.on("round-started",({round,totalRounds})=>{$("progressLabel").textContent=`第 ${round} 次作畫／共 ${totalRounds} 次`;});
 socket.on("game-finished",({works})=>{
   clearInterval(timer);myTurn=false;show("results");
-  $("works").innerHTML=works.map((w,i)=>`<article class="work"><b>第 ${w.round} 輪・${escapeHtml(w.playerName)}</b><p>原始作品</p><img src="${w.image}" alt="原始作品"><p>抽象線索</p><img class="abstract" src="${w.abstract}" alt="抽象線索"></article>`).join("");
+  $("works").innerHTML=works.map((w,i)=>`<article class="work"><b>第 ${w.round} 輪・${escapeHtml(w.playerName)}</b><p>原始作品</p><img src="${w.image}" alt="原始作品"><p>抽象線索</p><img class="abstract" src="${w.abstract}" alt="馬賽克線索"></article>`).join("");
 });
 socket.on("error-message",notice);
 $("backHome").onclick=()=>location.reload();
