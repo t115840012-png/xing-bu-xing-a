@@ -64,14 +64,37 @@ function floodFill(x,y,color){
 canvas.addEventListener("pointerdown",e=>{
   if(!myTurn||sent)return;
   const p=pos(e);
-  if(tool==="bucket"){floodFill(p.x,p.y,brushColor);return;}
-  drawing=true;last=p;canvas.setPointerCapture(e.pointerId);drawSegment(p,{x:p.x+0.01,y:p.y+0.01});
+  if(tool==="bucket"){
+    const before=snapshotCanvas();
+    floodFill(p.x,p.y,brushColor);
+    saveHistory(before);
+    return;
+  }
+  strokeBefore=snapshotCanvas();
+  drawing=true;last=p;canvas.setPointerCapture(e.pointerId);
+  drawSegment(p,{x:p.x+0.01,y:p.y+0.01});
 });
-canvas.addEventListener("pointermove",e=>{if(!drawing||!myTurn||sent)return;const p=pos(e);drawSegment(last,p);last=p;});
-canvas.addEventListener("pointerup",()=>drawing=false);
-canvas.addEventListener("pointercancel",()=>drawing=false);
+canvas.addEventListener("pointermove",e=>{
+  if(!drawing||!myTurn||sent)return;
+  const p=pos(e);drawSegment(last,p);last=p;
+});
+function finishStroke(){
+  if(!drawing)return;
+  drawing=false;
+  saveHistory(strokeBefore);
+  strokeBefore=null;
+}
+canvas.addEventListener("pointerup",finishStroke);
+canvas.addEventListener("pointercancel",finishStroke);
 function clearCanvas(){ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);}
-$("clear").onclick=()=>{if(myTurn)clearCanvas();};
+$("clear").onclick=()=>{
+  if(!myTurn||sent)return;
+  const before=snapshotCanvas();
+  clearCanvas();
+  saveHistory(before);
+};
+$("undo").onclick=undo;
+$("redo").onclick=redo;
 
 async function abstractImage(source){
   const img=new Image();img.src=source;
