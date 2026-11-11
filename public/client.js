@@ -19,6 +19,24 @@ $("start").onclick=()=>{if((room?.players.length||0)<2)return notice("至少需�
 
 const canvas=$("canvas"),ctx=canvas.getContext("2d",{willReadFrequently:true});
 let drawing=false,last=null,tool="brush",brushColor="#292638",brushSize=7;
+let undoStack=[],redoStack=[],strokeBefore=null;
+const HISTORY_LIMIT=40;
+function snapshotCanvas(){return ctx.getImageData(0,0,canvas.width,canvas.height);}
+function saveHistory(before){
+  if(!before)return;
+  undoStack.push(before);
+  if(undoStack.length>HISTORY_LIMIT)undoStack.shift();
+  redoStack=[];
+  updateHistoryButtons();
+}
+function restoreSnapshot(image){ctx.putImageData(image,0,0);}
+function undo(){if(!myTurn||sent||!undoStack.length)return;redoStack.push(snapshotCanvas());restoreSnapshot(undoStack.pop());updateHistoryButtons();}
+function redo(){if(!myTurn||sent||!redoStack.length)return;undoStack.push(snapshotCanvas());restoreSnapshot(redoStack.pop());updateHistoryButtons();}
+function updateHistoryButtons(){
+  if($("undo"))$("undo").disabled=!myTurn||sent||undoStack.length===0;
+  if($("redo"))$("redo").disabled=!myTurn||sent||redoStack.length===0;
+}
+function resetHistory(){undoStack=[];redoStack=[];strokeBefore=null;updateHistoryButtons();}
 function pos(e){const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(canvas.width,(e.clientX-r.left)*canvas.width/r.width)),y:Math.max(0,Math.min(canvas.height,(e.clientY-r.top)*canvas.height/r.height))};}
 function setTool(next){tool=next;document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));canvas.style.cursor=tool==="bucket"?"cell":tool==="eraser"?"crosshair":"crosshair";}
 document.querySelectorAll("[data-tool]").forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
@@ -60,9 +78,9 @@ async function abstractImage(source){
   return new Promise(resolve=>{
     img.onload=()=>{
       // 先縮小取樣，再用最近鄰放大，形成清楚的大型像素方塊。
-      // 45 x 26 的取樣尺寸，約每 20 x 20 畫布像素合成一格。
+      // 30 x 17 的取樣尺寸，約每 30 x 30 畫布像素合成一格。
       const small=document.createElement("canvas");
-      small.width=45;small.height=26;
+      small.width=30;small.height=17;
       const s=small.getContext("2d");
       s.fillStyle="#fff";s.fillRect(0,0,small.width,small.height);
       s.drawImage(img,0,0,small.width,small.height);
@@ -88,7 +106,7 @@ socket.on("turn-start",async data=>{
   $("roundLabel").textContent=`第 ${data.round} / ${data.totalRounds} 次作畫`;
   $("turnLabel").textContent="大家一起畫！";
   $("canvas").style.opacity="1";
-  ["clear","submit"].forEach(id=>$(id).disabled=false);
+  ["clear","submit","undo","redo"].forEach(id=>$(id).disabled=false);
   clearCanvas();
   $("promptBox").classList.toggle("hidden",!data.previous);
   $("firstPrompt").classList.toggle("hidden",!!data.previous);
@@ -100,7 +118,7 @@ $("submit").onclick=sendWork;
 async function sendWork(){
   if(!myTurn||sent)return;
   sent=true;drawing=false;clearInterval(timer);
-  $("submit").disabled=true;$("clear").disabled=true;
+  $("submit").disabled=true;$("clear").disabled=true;$("undo").disabled=true;$("redo").disabled=true;
   $("turnLabel").textContent="已送出！等待其他玩家完成……";
   const image=canvas.toDataURL("image/png"),abstract=await abstractImage(image);
   socket.emit("submit-drawing",{image,abstract,round:currentRound});

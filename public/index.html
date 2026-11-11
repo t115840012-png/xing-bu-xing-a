@@ -51,7 +51,7 @@
     </div>
     <label class="size-control">筆刷粗細 <input id="brushSize" type="range" min="2" max="40" value="7"><b id="brushSizeValue">7</b></label>
   </div>
-  <div class="drawtools"><button id="clear" class="secondary">清空畫布</button><button id="submit">送出作品</button></div>
+  <div class="drawtools"><button id="undo" class="secondary" disabled>↶ 撤回</button><button id="redo" class="secondary" disabled>↷ 恢復</button><button id="clear" class="secondary">清空畫布</button><button id="submit">送出作品</button></div>
   <p class="hint">所有人同時作畫；你送出後，畫布會鎖定，等其他玩家完成後一起傳給下一位。</p>
 </section>
 <section id="results" class="panel hidden"><h2>接龍完成！</h2><p>看看大家如何把線索變成新的想像。</p><div id="works" class="works"></div><button id="backHome">回到首頁</button></section>
